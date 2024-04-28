@@ -1,0 +1,4 @@
+# keep the results folder but don't stage its contents
+experiment_results/*
+!experiment_results/.gitkeep
+slurm*
