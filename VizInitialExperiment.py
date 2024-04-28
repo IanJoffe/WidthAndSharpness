@@ -24,7 +24,7 @@ def graph_loss(results, feature, width):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("results_file", type=str, help="The path to the results file saved by InitialExperiment.py")
+    parser.add_argument("results_file", type=str, help="The path to the pickled results saved by InitialExperiment.py")
     args = parser.parse_args()
 
     with open(args.results_file, 'rb') as f:

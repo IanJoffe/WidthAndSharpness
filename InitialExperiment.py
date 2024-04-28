@@ -178,6 +178,6 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Connected to", str(device))
     ground_truth_model = train_true_model()
-    results = run_width_experiment(n=100, d=10, m=np.arange(10, 101, 10), true_function=ground_truth_model)
+    results = run_width_experiment(n=100, d=10, m=np.arange(10, 101, 20), true_function=ground_truth_model)
     with open("./experiment_results/exp1.pkl", 'wb') as file:
         pickle.dump(results, file)

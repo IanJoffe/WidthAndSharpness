@@ -4,5 +4,6 @@ conda activate WidthAndSharpness
 pip install -r requirements.txt
 
 python InitialExperiment.py
+python VizInitialExperiment.py experiment_results/exp1.pkl
 
 conda deactivate
