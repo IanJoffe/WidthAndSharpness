@@ -1,3 +1,13 @@
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+import pickle
+
+
 class simpleDataset(Dataset):
     def __init__(self, input_data, output_data):
         self.input_data = input_data
@@ -42,6 +52,7 @@ def train_true_model():
     criterion = nn.MSELoss()
     optimizer = torch.optim.SGD(ground_truth_model.parameters(), lr=3e-4)
 
+    print("Training ground truth model")
     for epoch in np.arange(5000):       # NN empirically converges by this time
         all_loss = torch.tensor([]).to(device)
         for data, labels in dataloader:
@@ -57,6 +68,7 @@ def train_true_model():
 
         if epoch % int(500) == 0:
             print("Loss: ", torch.mean(all_loss))
+    print("Completed training ground truth model")
 
     return ground_truth_model
   
@@ -101,6 +113,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     dataset = simpleDataset(input_data, output_data)
     dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False)
 
+    print("Training experimental models")
     # run NN for each width
     for width in m:
         model = two_layer_relu_network(d, 1, width).to(device)
@@ -142,7 +155,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
                     break
                 else:
                     if epoch == epochs - 1:
-                    print("Model with width", width, "did not interpolate")
+                        print("Model with width", width, "did not interpolate")
 
 
         def point_sharpness(x):
@@ -157,20 +170,13 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
 
         experiment_results[width] = {"converged":converged, "widths":m, "sharpness":sharpness, "train_loss":train_loss, "valid_loss":valid_loss, "mean_training_sparsity":mean_training_sparsity, "mean_valid_sparsity":mean_valid_sparsity, "loss_curve":loss_curve}
 
+    print("Completed training experimental models")
     return experiment_results
 
 
 if __name__ == "__main__":
-    import numpy as np
-    import torch
-    import torch.nn as nn
-    import torch.optim as optim
-    from torch.utils.data import Dataset, DataLoader
-    import matplotlib.pyplot as plt
-    from tqdm import tqdm
-    import pickle
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print("Connected to", str(device))
     ground_truth_model = train_true_model()
     results = run_width_experiment(n=100, d=10, m=np.arange(10, 101, 10), true_function=ground_truth_model)
     with open("./experiment_results/exp1.pkl", 'wb') as file:
