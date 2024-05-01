@@ -3,45 +3,53 @@ import argparse
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
-import pickle
+import json
 
 def graph_feature(results, feature, widths=None):
     if widths == None:
-        widths = sorted(list(results.keys()))   # allows you to only plot some widths
-    y = np.array([results[i][feature] for i in widths])
+        widths = sorted(list(results.keys()), key=int)   # allows you to only plot some widths
+    y = np.array([results[i][feature][-1] for i in widths])
     fig, ax = plt.subplots()
     ax.scatter(widths, y)
+    ax.set_xlabel("Width")
+    ax.set_ylabel(feature + " after Completed Training")
     return fig
 
-def graph_loss(results, feature, width):
-    # feature MUST be "valid_loss", "train_loss", or some other similarly formatted array
-    losses = torch.tensor(results[width][feature])
+def graph_curve(results, feature, width, apply_log=True):
+    # feature MUST be "loss_curve", or some other similarly formatted array
+    vals = torch.tensor(results[width][feature])
     fig, ax = plt.subplots()
-    plt.plot(range(len(losses.detach().numpy())), np.log(losses.detach().numpy()))
-    ax.scatter(widths, y)
+    if apply_log:
+        ax.set_ylabel("Log " + feature)
+        ax.plot(results[width]["epochs"], np.log(vals.detach().numpy()))
+    else:
+        ax.plot(results[width]["epochs"], vals.detach().numpy())
+        ax.set_ylabel(feature)
+    ax.set_title(feature + " curve for m = " + str(width) + " over training")
+    ax.set_xlabel("Epoch")
     return fig
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("results_file", type=str, help="The path to the pickled results saved by InitialExperiment.py")
+    parser.add_argument("results_file", type=str, help="The path to the json results file saved by InitialExperiment.py")
     args = parser.parse_args()
 
-    with open(args.results_file, 'rb') as f:
-        results = pickle.load(f)
+    with open(args.results_file, 'r') as f:
+        results = json.load(f)
 
-    for feature in ["sharpness, train_loss", "valid_loss"]:
-        figure_tosave = graph_feature(feature, results)
+    for feature in ["sharpness", "train_loss", "valid_loss"]:
+        figure_tosave = graph_feature(results, feature)
+        (Path(args.results_file).parent / Path(args.results_file).stem).mkdir(parents=True, exist_ok=True)
         figure_tosave.savefig(Path(args.results_file).parent /
-                               Path(args.results_file).parent /
-                                (feature + ".png"))
+                               Path(args.results_file).stem /
+                                (feature + ".png"),
+                                bbox_inches="tight")
         
     for width in results.keys():
-        figure_tosave = graph_loss(results, "train_loss", width)
-        figure_tosave.savefig(Path(args.results_file).parent /
-                               Path(args.results_file).parent /
-                                ("train_loss_" + str(width) + ".png"))
-        figure_tosave = graph_loss(results, "valid_loss", width)
-        figure_tosave.savefig(Path(args.results_file).parent /
-                               Path(args.results_file).parent /
-                                ("valid_loss_" + str(width) + ".png"))
+        for feature in ["sharpness", "train_loss", "valid_loss"]:
+            figure_tosave = graph_curve(results, feature, width)
+            figure_tosave.savefig(Path(args.results_file).parent /
+                                  Path(args.results_file).stem /
+                                    (feature + "_" + str(width) + ".png"),
+                                    bbox_inches="tight")
