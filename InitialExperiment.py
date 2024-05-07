@@ -104,12 +104,12 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     torch.manual_seed(random_seed)
     input_data = input_dist(**input_dist_args, size=(n, d)).to(device)
     if normalize_input:
-        input_data = input_data / torch.norm(input_data, dim=0)
+        input_data = input_data / (torch.norm(input_data, dim=1).unsqueeze(1))
     output_data = true_function(input_data).to(device)
 
     valid_input = input_dist(**input_dist_args, size=(n_valid, d)).to(device)
     if normalize_input:
-        valid_input = valid_input / torch.norm(valid_input, dim=0)
+        valid_input = valid_input / (torch.norm(valid_input, dim=1).unsqueeze(1))
     valid_output = true_function(valid_input).to(device)
 
     dataset = simpleDataset(input_data, output_data)
@@ -187,8 +187,8 @@ if __name__ == "__main__":
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Connected to", str(device))
-    ground_truth_model = train_true_model()
-    results = run_width_experiment(n=100, d=10, m=np.array([500]), convergence_req=-np.inf, true_function=ground_truth_model)
+    # ground_truth_model = train_true_model()
+    results = run_width_experiment(n=100, d=10, m=np.array([10, 40, 70, 100]), true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=-np.inf)
 
 
     with open(args.results_file, 'w') as f:
