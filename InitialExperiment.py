@@ -188,7 +188,8 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Connected to", str(device))
     # ground_truth_model = train_true_model()
-    results = run_width_experiment(n=100, d=10, m=np.array([10, 40, 70, 100]), true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=-np.inf)
+    # lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1)
+    results = run_width_experiment(n=100, d=30, m=np.array([10, 40, 70, 100]), true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=-np.inf, label_noise_sd=3, max_epochs=15000)
 
 
     with open(args.results_file, 'w') as f:

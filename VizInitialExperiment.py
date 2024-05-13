@@ -5,10 +5,15 @@ import torch
 import matplotlib.pyplot as plt
 import json
 
-def graph_feature(results, feature, widths=None):
+def graph_feature(results, feature, widths=None, when="last"):
     if widths == None:
         widths = sorted(list(results.keys()), key=int)   # allows you to only plot some widths
-    y = np.array([results[i][feature][-1] for i in widths])
+    if when == "last":
+        y = np.array([results[i][feature][-1] for i in widths])
+    elif when == "best":
+        y = np.array([min(results[i][feature]) for i in widths])
+    else:
+        y = np.array([])
     fig, ax = plt.subplots()
     ax.scatter(widths, y)
     ax.set_xlabel("Width")
@@ -39,11 +44,19 @@ if __name__ == "__main__":
         results = json.load(f)
 
     for feature in ["sharpness", "train_loss", "valid_loss"]:
-        figure_tosave = graph_feature(results, feature)
+        figure_tosave = graph_feature(results, feature, when="last")
         (Path(args.results_file).parent / Path(args.results_file).stem).mkdir(parents=True, exist_ok=True)
         figure_tosave.savefig(Path(args.results_file).parent /
                                Path(args.results_file).stem /
-                                (feature + ".png"),
+                                (feature + "final" + ".png"),
+                                bbox_inches="tight")
+        
+    for feature in ["sharpness", "train_loss", "valid_loss"]:
+        figure_tosave = graph_feature(results, feature, when="best")
+        (Path(args.results_file).parent / Path(args.results_file).stem).mkdir(parents=True, exist_ok=True)
+        figure_tosave.savefig(Path(args.results_file).parent /
+                               Path(args.results_file).stem /
+                                (feature + "best" + ".png"),
                                 bbox_inches="tight")
         
     for width in results.keys():
