@@ -24,12 +24,10 @@ def graph_curve(results, feature, width, apply_log=True):
     # feature MUST be "loss_curve", or some other similarly formatted array
     vals = torch.tensor(results[width][feature])
     fig, ax = plt.subplots()
+    ax.plot(results[width]["epochs"], vals.detach().numpy())
     if apply_log:
-        ax.set_ylabel("Log " + feature)
-        ax.plot(results[width]["epochs"], np.log(vals.detach().numpy()))
-    else:
-        ax.plot(results[width]["epochs"], vals.detach().numpy())
-        ax.set_ylabel(feature)
+        ax.set_yscale("log")
+    ax.set_ylabel(feature)
     ax.set_title(feature + " curve for m = " + str(width) + " over training")
     ax.set_xlabel("Epoch")
     return fig
@@ -61,7 +59,7 @@ if __name__ == "__main__":
         
     for width in results.keys():
         for feature in ["sharpness", "train_loss", "valid_loss"]:
-            figure_tosave = graph_curve(results, feature, width)
+            figure_tosave = graph_curve(results, feature, width, apply_log=False)
             figure_tosave.savefig(Path(args.results_file).parent /
                                   Path(args.results_file).stem /
                                     (feature + "_" + str(width) + ".png"),

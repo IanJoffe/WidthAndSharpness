@@ -35,7 +35,7 @@ class two_layer_relu_network(nn.Module):
         return z2
   
 
-def train_true_model():
+def train_true_model(d):
     """
     Train a model that may be used as the ground truth function in the experiment
     """
@@ -43,13 +43,13 @@ def train_true_model():
         return torch.sin(torch.sum(x, dim=1).unsqueeze(1))
 
     torch.manual_seed(2024)
-    input_data = torch.normal(mean=0, std=1, size=(100, 10)).to(device)
+    input_data = torch.normal(mean=0, std=1, size=(100, d)).to(device)
     input_data = input_data / torch.norm(input_data, dim=0)
     output_data = sin_sum(input_data).to(device)
     dataset = simpleDataset(input_data, output_data)
     dataloader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
 
-    ground_truth_model = two_layer_relu_network(10, 1, 5000).to(device)
+    ground_truth_model = two_layer_relu_network(d, 1, 5000).to(device)
     criterion = nn.MSELoss()
     optimizer = torch.optim.SGD(ground_truth_model.parameters(), lr=3e-4)
 
@@ -187,10 +187,8 @@ if __name__ == "__main__":
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Connected to", str(device))
-    # ground_truth_model = train_true_model()
+    # ground_truth_model = train_true_model(d=30)
     # lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1)
-    results = run_width_experiment(n=100, d=30, m=np.array([10, 40, 70, 100]), true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=-np.inf, label_noise_sd=3, max_epochs=15000)
-
-
+    results = run_width_experiment(n=100, d=30, m=np.array([10, 40, 70, 100]), true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=-np.inf, label_noise_sd=0.12)
     with open(args.results_file, 'w') as f:
         json.dump(results, f)
