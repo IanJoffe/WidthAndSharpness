@@ -75,8 +75,8 @@ def train_true_model(d):
   
   
 def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
-                         lr = 3e-4, batch_size=1, convergence_req=1e-3, max_epochs=3e4, num_measurements=200,
-                         input_dist=torch.normal, input_dist_args = {"mean":0, "std":1}, normalize_input=True,
+                         lr = 3e-4, batch_size=1, convergence_req=1e-3, convergence_halt=False, max_epochs=3e4, num_measurements=200,
+                         input_dist=torch.normal, input_dist_args = {"mean":0, "std":1}, normalize_input=True, shuffle_data=False,
                          true_function=lambda x: torch.sin(torch.sum(x, dim=1).unsqueeze(1)),
                          label_noise_sd=0.05, random_seed=137):
     """
@@ -87,12 +87,14 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     d: int, dimension of each training data point
     m: list[int], widths of neural network to run experiment on
     lr: float, learning rate
-    convergence_req: float, the NN will be considered converged if EVERY data points has loss this low and training will halt
+    convergence_req: float, the NN will be considered converged if EVERY data points has loss this low, also used to calculate accuracy
+    convergence_halt: bool, set to True to halt training once converged
     max_epochs: int, the NN will run for this many epochs before giving up on convergence
     num_measurements: int, validation loss and sharpness will be measured very max_epochs/num_measurements epochs
     input_dist: torch function, determines distribution of input data
     input_dist_args: dict{str: float}, a dictionary with parameters like mean and sd for the input_dist. Do not include the size parameter.
     normalize_input: bool, whether to normalize input trian and valid data to have norm 1. Useful to convert gaussian data to uniform on the hypersphere.
+    shuffle_data: whether to shuffle the order of the (data, label) pairs before each epoch of SGD
     true_function: torch function, output = torch_function(input). The function should act on the full nxd matrix of input data
     label_noise_sd: float, gives the standard deviation for gaussian noise in noisy SGD
     random_seed: int
@@ -113,7 +115,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     valid_output = true_function(valid_input).to(device)
 
     dataset = simpleDataset(input_data, output_data)
-    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False)
+    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=shuffle_data)
 
     print("Training experimental models")
     # run NN for each width
@@ -128,12 +130,14 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
         measured_epochs = []
         train_loss = []
         valid_loss = []
+        train_accuracy = []
+        valid_accuracy = []
         sharpness = []
-        def get_sharpness(dataloader, model):
+        def get_sharpness(data, model):
             def point_sharpness(x, model):
                 gradients = torch.autograd.grad(model(x), model.parameters(), create_graph=True)
                 return torch.linalg.vector_norm(torch.cat([g.flatten() for g in gradients]))**2
-            total_sharpness = 2/len(dataloader) * np.sum(np.array([point_sharpness(x[0], model).item() for x in dataloader]))
+            total_sharpness = 2/len(data) * np.sum(np.array([point_sharpness(x, model).item() for x in data]))
             return total_sharpness
 
         with tqdm(range(int(epochs)), desc="Training Progress, m=" + str(width)) as progress_bar:
@@ -159,22 +163,24 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
                     measured_epochs.append(epoch)
                     train_loss.append(criterion(model(input_data), output_data).item())
                     valid_loss.append(criterion(model(valid_input), valid_output).item())
-                    sharpness.append(get_sharpness(dataloader, model))
+                    train_accuracy.append(torch.isclose(model(input_data), output_data, atol=convergence_req).float().mean().item())
+                    valid_accuracy.append(torch.isclose(model(valid_input), valid_output, atol=convergence_req).float().mean().item())
+                    sharpness.append(get_sharpness(input_data, model))
                     progress_bar.set_postfix(avg_loss=torch.mean(all_loss).item(), max_loss=torch.max(all_loss).item())
                     print(measured_epochs, train_loss, valid_loss, sharpness)
 
                 # check convergence
-                if all(all_loss < convergence_req):
+                if (not converged) and all(all_loss < convergence_req):
                     model_output = model(data)
                     loss = criterion(model_output, labels)
                     converged = True
                     print("Model with width", width, "interpolated in", epoch, "epochs")
-                    break
-                else:
-                    if epoch == epochs - 1:
-                        print("Model with width", width, "did not interpolate")
+                    if convergence_halt:
+                        break
+                if (not converged) and (epoch == epochs - 1):
+                    print("Model with width", width, "did not interpolate")
 
-        experiment_results[int(width)] = {"converged":converged, "epochs":measured_epochs, "train_loss":train_loss, "valid_loss":valid_loss, "sharpness": sharpness}
+        experiment_results[int(width)] = {"converged":converged, "epochs":measured_epochs, "train_loss":train_loss, "valid_loss":valid_loss, "train_accuracy":train_accuracy, "valid_accuracy":valid_accuracy, "sharpness": sharpness}
 
     print("Completed training experimental models")
     return experiment_results
@@ -188,7 +194,8 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Connected to", str(device))
     # ground_truth_model = train_true_model(d=30)
-    # lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1)
-    results = run_width_experiment(n=100, d=30, m=np.array([10, 40, 70, 100]), true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=-np.inf, label_noise_sd=0.12)
+    # XOR Function| lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1)
+    # Binary Data Generator| lambda size: torch.randint(0, 2, size=size, dtype=torch.float32)*2-1
+    results = run_width_experiment(n=300, d=30, m=np.arange(40,100,10), input_dist=lambda size: torch.randint(0, 2, size=size, dtype=torch.float32)*2-1, input_dist_args={}, normalize_input=False, shuffle_data=True, true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=5e-3, lr=1.2e-1, batch_size=120, label_noise_sd=0.25, max_epochs=500000)
     with open(args.results_file, 'w') as f:
         json.dump(results, f)
