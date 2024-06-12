@@ -7,6 +7,8 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import json
+from pathlib import Path
+import copy
 
 
 class simpleDataset(Dataset):
@@ -80,7 +82,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
                          true_function=lambda x: torch.sin(torch.sum(x, dim=1).unsqueeze(1)),
                          label_noise_sd=0.05, random_seed=137):
     """
-    RETURNS: {m: [converged, sharpness, train_loss, valid_loss, mean_training_sparsity, mean_valid_sparsity, loss_curve]}
+    RETURNS: {m: model}, {m: [converged, sharpness, train_loss, valid_loss, mean_training_sparsity, mean_valid_sparsity, loss_curve]}
     ARGS:
     n: int, number of points in training data
     n_valid: int, number of points in validation data
@@ -101,6 +103,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     """
 
     experiment_results = {}
+    trained_models = {}
 
     # generate data
     torch.manual_seed(random_seed)
@@ -180,22 +183,26 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
                 if (not converged) and (epoch == epochs - 1):
                     print("Model with width", width, "did not interpolate")
 
+        trained_models[int(width)] = copy.deepcopy(model)
         experiment_results[int(width)] = {"converged":converged, "epochs":measured_epochs, "train_loss":train_loss, "valid_loss":valid_loss, "train_accuracy":train_accuracy, "valid_accuracy":valid_accuracy, "sharpness": sharpness}
 
     print("Completed training experimental models")
-    return experiment_results
+    return trained_models, experiment_results
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("results_file", type=str, help="The path to the json file to save results to")
     args = parser.parse_args()
+    Path(args.results_file).parent.mkdir(parents=True, exist_ok=True)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Connected to", str(device))
     # ground_truth_model = train_true_model(d=30)
     # XOR Function| lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1)
     # Binary Data Generator| lambda size: torch.randint(0, 2, size=size, dtype=torch.float32)*2-1
-    results = run_width_experiment(n=300, d=30, m=np.arange(40,100,10), input_dist=lambda size: torch.randint(0, 2, size=size, dtype=torch.float32)*2-1, input_dist_args={}, normalize_input=False, shuffle_data=True, true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=5e-3, lr=1.2e-1, batch_size=120, label_noise_sd=0.25, max_epochs=500000)
+    trained_models, results = run_width_experiment(n=300, d=30, m=np.array([30,70,110]), true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=1e-2, shuffle_data=True, batch_size=120, lr=1.2e-1, label_noise_sd=8e-3, max_epochs=700000)
+    for m in trained_models.keys():
+        torch.save(trained_models[m], Path(args.results_file).parent / ("model_" + str(m) + ".pth"))
     with open(args.results_file, 'w') as f:
         json.dump(results, f)

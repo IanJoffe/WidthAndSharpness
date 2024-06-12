@@ -1,3 +1,4 @@
+from InitialExperiment import two_layer_relu_network
 from pathlib import Path
 import argparse
 import numpy as np
@@ -46,6 +47,14 @@ def graph_curve(results, feature, width, apply_log=True, moving_average=False):
     ax.set_xlabel("Epoch")
     return fig
 
+def hist_weights(saved_model, width):
+    weights_fc1 = saved_model.fc1.weight.data.detach().cpu().numpy()
+    fig, ax = plt.subplots()
+    ax.hist(weights_fc1[:,2:].flatten(), bins=100)
+    ax.set_title("First Layer Weights for Spurious Dimensions, m = " + str(width))
+    return fig
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -57,9 +66,8 @@ if __name__ == "__main__":
 
     for feature in ["sharpness", "train_loss", "valid_loss"]:
         figure_tosave = graph_feature(results, feature, when="last", moving_average=0.9)
-        (Path(args.results_file).parent / Path(args.results_file).stem).mkdir(parents=True, exist_ok=True)
+        Path(args.results_file).parent.mkdir(parents=True, exist_ok=True)
         figure_tosave.savefig(Path(args.results_file).parent /
-                               Path(args.results_file).stem /
                                 (feature + "final" + ".png"),
                                 bbox_inches="tight")
         
@@ -70,6 +78,13 @@ if __name__ == "__main__":
             else:
                 figure_tosave = graph_curve(results, feature, width, apply_log=False, moving_average=0.9)
             figure_tosave.savefig(Path(args.results_file).parent /
-                                  Path(args.results_file).stem /
                                     (feature + "_" + str(width) + ".png"),
                                     bbox_inches="tight")
+
+    for width in results.keys():
+        saved_model = torch.load(Path(args.results_file).parent /
+                                  ("model_" + str(width) + ".pth"))
+        figure_tosave = hist_weights(saved_model, width)
+        figure_tosave.savefig(Path(args.results_file).parent /
+                                  ("spurious_weights_" + str(width) + ".png"),
+                                  bbox_inches="tight")
