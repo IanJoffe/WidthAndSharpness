@@ -148,7 +148,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
             for epoch in progress_bar:
 
                 # take measurments
-                if epoch % int(epochs/num_measurements) == 0:
+                if (epoch % int(epochs/num_measurements) == 0) or (max_epochs - epoch < 500):
                     measured_epochs.append(epoch)
                     train_loss.append(criterion(model(input_data), output_data).item())
                     valid_loss.append(criterion(model(valid_input), valid_output).item())
@@ -204,7 +204,7 @@ if __name__ == "__main__":
     # ground_truth_model = train_true_model(d=30)
     # XOR Function| lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1)
     # Binary Data Generator| lambda size: torch.randint(0, 2, size=size, dtype=torch.float32)*2-1
-    trained_models, results = run_width_experiment(n=300, d=30, m=np.array([100]), true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=1e-2, shuffle_data=True, batch_size=120, lr=1.2e-1, label_noise_sd=8e-1, max_epochs=1.5e6)
+    trained_models, results = run_width_experiment(n=300, d=30, m=np.array([70]), true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=1e-2, shuffle_data=True, batch_size=120, lr=1.2e-1, label_noise_sd=8e-1, max_epochs=1.4e6)
     for m in trained_models.keys():
         (Path(args.results_file).parent / ("checkpoints_" + str(m))).mkdir(parents=True, exist_ok=True)
         for epoch in trained_models[m].keys():

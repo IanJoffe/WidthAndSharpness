@@ -49,7 +49,7 @@ def graph_curve(results, feature, width, apply_log=True, moving_average=False):
 
 def plot_weights_progression(checkpoints_list, width, min_dim=None, max_dim=None, min_neuron=None, max_neuron=None):
     fc1_weights_list = [model.fc1.weight.data.detach().cpu().numpy() for model in checkpoints_list]
-    fc1_weights_list_to_plot = np.array([weights[min_neuron:max_neuron:,min_dim:max_dim].flatten() for weights in fc1_weights_list]).T
+    fc1_weights_list_to_plot = np.array([weights[min_neuron:max_neuron,min_dim:max_dim].flatten() for weights in fc1_weights_list]).T
     fig, ax = plt.subplots()
     for weights in fc1_weights_list_to_plot:
         ax.plot(weights, alpha=0.1, c="blue")
@@ -106,10 +106,11 @@ if __name__ == "__main__":
     checkpoint_subdirs = [d for d in Path(args.results_file).parent.iterdir() if (d.is_dir() and d.name.startswith("checkpoints"))]
     for checkpoint_subdir in checkpoint_subdirs:
         width = checkpoint_subdir.name.split("_")[-1]
-        checkpoints_list = [torch.load(ckpt) for ckpt in checkpoint_subdir.iterdir()]
+        checkpoints_list_fnames = sorted([ckpt for ckpt in checkpoint_subdir.iterdir()], key=lambda fname: int(fname.stem.split("_")[-1]))
+        checkpoints_list = [torch.load(ckpt) for ckpt in checkpoints_list_fnames]
         figure_tosave = plot_weights_progression(checkpoints_list, width)
         figure_tosave.savefig(Path(args.results_file).parent /
-                            ("weights_progression_" + str(width) + "neuron_" + str(i) + ".png"),
+                            ("weights_progression_" + str(width) + ".png"),
                             bbox_inches="tight")
 
     for width in results.keys():
