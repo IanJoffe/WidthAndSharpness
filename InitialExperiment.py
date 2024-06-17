@@ -103,7 +103,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     """
 
     experiment_results = {}
-    trained_models = {}
+    model_checkpoints = {}
 
     # generate data
     torch.manual_seed(random_seed)
@@ -130,6 +130,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
         converged = False
         epochs = max_epochs
 
+        model_checkpoints[int(width)] = {}
         measured_epochs = []
         train_loss = []
         valid_loss = []
@@ -143,9 +144,19 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
             total_sharpness = 2/len(data) * np.sum(np.array([point_sharpness(x, model).item() for x in data]))
             return total_sharpness
 
-        with tqdm(range(int(epochs)), desc="Training Progress, m=" + str(width)) as progress_bar:
+        with tqdm(range(int(epochs)+1), desc="Training Progress, m=" + str(width)) as progress_bar:
             for epoch in progress_bar:
 
+                # take measurments
+                if epoch % int(epochs/num_measurements) == 0:
+                    measured_epochs.append(epoch)
+                    train_loss.append(criterion(model(input_data), output_data).item())
+                    valid_loss.append(criterion(model(valid_input), valid_output).item())
+                    train_accuracy.append(torch.isclose(model(input_data), output_data, atol=convergence_req).float().mean().item())
+                    valid_accuracy.append(torch.isclose(model(valid_input), valid_output, atol=convergence_req).float().mean().item())
+                    sharpness.append(get_sharpness(input_data, model))
+                    model_checkpoints[int(width)][epoch] = copy.deepcopy(model)
+                    
                 all_loss = torch.tensor([]).to(device)
                 for data, labels in dataloader:
 
@@ -161,16 +172,8 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
                     loss_unnoisy = criterion(model_output, labels)
                     all_loss = torch.cat((all_loss, loss_unnoisy.unsqueeze(0)))
 
-                # take measurments
                 if epoch % int(epochs/num_measurements) == 0:
-                    measured_epochs.append(epoch)
-                    train_loss.append(criterion(model(input_data), output_data).item())
-                    valid_loss.append(criterion(model(valid_input), valid_output).item())
-                    train_accuracy.append(torch.isclose(model(input_data), output_data, atol=convergence_req).float().mean().item())
-                    valid_accuracy.append(torch.isclose(model(valid_input), valid_output, atol=convergence_req).float().mean().item())
-                    sharpness.append(get_sharpness(input_data, model))
                     progress_bar.set_postfix(avg_loss=torch.mean(all_loss).item(), max_loss=torch.max(all_loss).item())
-                    print(measured_epochs, train_loss, valid_loss, sharpness)
 
                 # check convergence
                 if (not converged) and all(all_loss < convergence_req):
@@ -183,11 +186,10 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
                 if (not converged) and (epoch == epochs - 1):
                     print("Model with width", width, "did not interpolate")
 
-        trained_models[int(width)] = copy.deepcopy(model)
         experiment_results[int(width)] = {"converged":converged, "epochs":measured_epochs, "train_loss":train_loss, "valid_loss":valid_loss, "train_accuracy":train_accuracy, "valid_accuracy":valid_accuracy, "sharpness": sharpness}
 
     print("Completed training experimental models")
-    return trained_models, experiment_results
+    return model_checkpoints, experiment_results
 
 
 if __name__ == "__main__":
@@ -198,11 +200,14 @@ if __name__ == "__main__":
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Connected to", str(device))
+
     # ground_truth_model = train_true_model(d=30)
     # XOR Function| lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1)
     # Binary Data Generator| lambda size: torch.randint(0, 2, size=size, dtype=torch.float32)*2-1
-    trained_models, results = run_width_experiment(n=300, d=30, m=np.array([30,70,110]), true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=1e-2, shuffle_data=True, batch_size=120, lr=1.2e-1, label_noise_sd=8e-3, max_epochs=700000)
+    trained_models, results = run_width_experiment(n=300, d=30, m=np.array([100]), true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=1e-2, shuffle_data=True, batch_size=120, lr=1.2e-1, label_noise_sd=8e-1, max_epochs=1.5e6)
     for m in trained_models.keys():
-        torch.save(trained_models[m], Path(args.results_file).parent / ("model_" + str(m) + ".pth"))
+        (Path(args.results_file).parent / ("checkpoints_" + str(m))).mkdir(parents=True, exist_ok=True)
+        for epoch in trained_models[m].keys():
+            torch.save(trained_models[m][epoch], Path(args.results_file).parent / ("checkpoints_" + str(m)) / ("model_" + str(m) + "_epoch_" + str(epoch) + ".pth"))
     with open(args.results_file, 'w') as f:
         json.dump(results, f)

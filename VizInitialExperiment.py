@@ -12,7 +12,7 @@ def graph_feature(results, feature, widths=None, when="last", moving_average=Fal
     if when == "last":
         y = np.array([results[i][feature][-1] for i in widths])
     elif when == "best":
-        y = np.array([min(results[i][feature]) for i in widths])
+        y = np.array([min(results[i][feature][int(len(results[i][feature])/2):]) for i in widths])    # best may only occur in second half of measurements
     else:
         raise Exception("Argument when must be 'last' or 'best'")
     if moving_average:
@@ -47,10 +47,32 @@ def graph_curve(results, feature, width, apply_log=True, moving_average=False):
     ax.set_xlabel("Epoch")
     return fig
 
-def hist_weights(saved_model, width):
+def plot_weights_progression(checkpoints_list, width, min_dim=None, max_dim=None, min_neuron=None, max_neuron=None):
+    fc1_weights_list = [model.fc1.weight.data.detach().cpu().numpy() for model in checkpoints_list]
+    fc1_weights_list_to_plot = np.array([weights[min_neuron:max_neuron:,min_dim:max_dim].flatten() for weights in fc1_weights_list]).T
+    fig, ax = plt.subplots()
+    for weights in fc1_weights_list_to_plot:
+        ax.plot(weights, alpha=0.1, c="blue")
+    ax.set_ylabel("Weight")
+    ax.set_xlabel("Training Time")
+    ax.set_title("Progression of FC1 Weights Over Training, m=" + str(width))
+    return fig
+
+def plot_final_weights(saved_model, width, min_dim=1, max_dim=3):
+    assert max_dim - min_dim == 2, "Cannot plot weights for d > 2"
+    weights_fc1 = saved_model.fc1.weight.data.detach().cpu().numpy()
+    informative_weights_fc1 = weights_fc1[:,min_dim:max_dim]
+    fig, ax = plt.subplots()
+    ax.scatter(informative_weights_fc1[:,0], informative_weights_fc1[:,1], s=5)
+    ax.set_xlim(1.2 * min(min(informative_weights_fc1[:,0]), min(informative_weights_fc1[:,1])), 1.2 * max(max(informative_weights_fc1[:,0]), max(informative_weights_fc1[:,1])))
+    ax.set_ylim(1.2 * min(min(informative_weights_fc1[:,0]), min(informative_weights_fc1[:,1])), 1.2 * max(max(informative_weights_fc1[:,0]), max(informative_weights_fc1[:,1])))
+    ax.set_title("First Layer Weights for Informative Dimensions, m = " + str(width))
+    return fig
+
+def hist_weights(saved_model, width, min_dim=3, max_dim=None):
     weights_fc1 = saved_model.fc1.weight.data.detach().cpu().numpy()
     fig, ax = plt.subplots()
-    ax.hist(weights_fc1[:,2:].flatten(), bins=100)
+    ax.hist(weights_fc1[:,min_dim:max_dim].flatten(), bins=100)
     ax.set_title("First Layer Weights for Spurious Dimensions, m = " + str(width))
     return fig
 
@@ -65,7 +87,7 @@ if __name__ == "__main__":
         results = json.load(f)
 
     for feature in ["sharpness", "train_loss", "valid_loss"]:
-        figure_tosave = graph_feature(results, feature, when="last", moving_average=0.9)
+        figure_tosave = graph_feature(results, feature, when="best", moving_average=False)
         Path(args.results_file).parent.mkdir(parents=True, exist_ok=True)
         figure_tosave.savefig(Path(args.results_file).parent /
                                 (feature + "final" + ".png"),
@@ -80,11 +102,25 @@ if __name__ == "__main__":
             figure_tosave.savefig(Path(args.results_file).parent /
                                     (feature + "_" + str(width) + ".png"),
                                     bbox_inches="tight")
+            
+    checkpoint_subdirs = [d for d in Path(args.results_file).parent.iterdir() if (d.is_dir() and d.name.startswith("checkpoints"))]
+    for checkpoint_subdir in checkpoint_subdirs:
+        width = checkpoint_subdir.name.split("_")[-1]
+        checkpoints_list = [torch.load(ckpt) for ckpt in checkpoint_subdir.iterdir()]
+        figure_tosave = plot_weights_progression(checkpoints_list, width)
+        figure_tosave.savefig(Path(args.results_file).parent /
+                            ("weights_progression_" + str(width) + "neuron_" + str(i) + ".png"),
+                            bbox_inches="tight")
 
     for width in results.keys():
-        saved_model = torch.load(Path(args.results_file).parent /
-                                  ("model_" + str(width) + ".pth"))
+        all_checkpoints = [ckpt for ckpt in (Path(args.results_file).parent / ("checkpoints_" + str(width))).iterdir()]
+        final_checkpoint = max(all_checkpoints, key=lambda fname: int(fname.stem.split("_")[-1]))
+        saved_model = torch.load(final_checkpoint)
         figure_tosave = hist_weights(saved_model, width)
         figure_tosave.savefig(Path(args.results_file).parent /
                                   ("spurious_weights_" + str(width) + ".png"),
+                                  bbox_inches="tight")
+        figure_tosave = plot_final_weights(saved_model, width)
+        figure_tosave.savefig(Path(args.results_file).parent /
+                                  ("informative_weights_" + str(width) + ".png"),
                                   bbox_inches="tight")
