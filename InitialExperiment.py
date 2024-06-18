@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
+from sam import SAM
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import json
@@ -77,7 +78,8 @@ def train_true_model(d):
   
   
 def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
-                         lr = 3e-4, batch_size=1, convergence_req=1e-3, convergence_halt=False, max_epochs=3e4, num_measurements=200,
+                         lr = 3e-4, momentum=0, batch_size=1, use_sam=False,
+                         convergence_req=1e-3, convergence_halt=False, max_epochs=3e4, num_measurements=200,
                          input_dist=torch.normal, input_dist_args = {"mean":0, "std":1}, normalize_input=True, shuffle_data=False,
                          true_function=lambda x: torch.sin(torch.sum(x, dim=1).unsqueeze(1)),
                          label_noise_sd=0.05, random_seed=137):
@@ -89,6 +91,8 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     d: int, dimension of each training data point
     m: list[int], widths of neural network to run experiment on
     lr: float, learning rate
+    momentum: float, momentum parameter for SGD
+    use_sam: bool, set to true to use the same optimizer, if false will use SGD with label noise
     convergence_req: float, the NN will be considered converged if EVERY data points has loss this low, also used to calculate accuracy
     convergence_halt: bool, set to True to halt training once converged
     max_epochs: int, the NN will run for this many epochs before giving up on convergence
@@ -125,7 +129,11 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     for width in m:
         model = two_layer_relu_network(d, 1, width).to(device)
         criterion = nn.MSELoss()
-        optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+        if use_sam:
+            base_optimizer = torch.optim.SGD
+            optimizer = SAM(model.parameters(), base_optimizer, lr=lr, momentum=momentum)
+        else:
+            optimizer = torch.optim.SGD(model.parameters(), lr=lr)
         loss = np.inf
         converged = False
         epochs = max_epochs
@@ -148,26 +156,36 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
             for epoch in progress_bar:
 
                 # take measurments
-                if (epoch % int(epochs/num_measurements) == 0) or (max_epochs - epoch < 500):
+                if epoch % int(epochs/num_measurements) == 0:
                     measured_epochs.append(epoch)
                     train_loss.append(criterion(model(input_data), output_data).item())
                     valid_loss.append(criterion(model(valid_input), valid_output).item())
                     train_accuracy.append(torch.isclose(model(input_data), output_data, atol=convergence_req).float().mean().item())
                     valid_accuracy.append(torch.isclose(model(valid_input), valid_output, atol=convergence_req).float().mean().item())
-                    sharpness.append(get_sharpness(input_data, model))
+                    sharpness.append(get_sharpness(input_data, model))    # causes warning and won't run on cuda only for first epoch
                     model_checkpoints[int(width)][epoch] = copy.deepcopy(model)
                     
                 all_loss = torch.tensor([]).to(device)
                 for data, labels in dataloader:
 
-                    optimizer.zero_grad()
+                    #optimizer.zero_grad()
                     model_output = model(data)
-                    label_noise = torch.normal(0, label_noise_sd, size=(batch_size,)).to(device)
-                    loss = criterion(model_output, labels + label_noise)
-                    loss.backward(retain_graph=True)
+                    label_noise = torch.normal(0, label_noise_sd, size=(batch_size,)).unsqueeze(dim=1).to(device)
+                    if use_sam:
+                        loss = criterion(model_output, labels)
+                    else:
+                        loss = criterion(model_output, labels + label_noise)
 
                     if epoch != epochs-1:
-                        optimizer.step()
+                        if use_sam:
+                            loss.backward()
+                            optimizer.first_step(zero_grad=True)
+                            criterion(model(data), labels).backward()
+                            optimizer.second_step(zero_grad=True)
+                        else:
+                            loss.backward()
+                            optimizer.step()
+                            optimizer.zero_grad()
 
                     loss_unnoisy = criterion(model_output, labels)
                     all_loss = torch.cat((all_loss, loss_unnoisy.unsqueeze(0)))
@@ -199,12 +217,13 @@ if __name__ == "__main__":
     Path(args.results_file).parent.mkdir(parents=True, exist_ok=True)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    torch.cuda.init()
     print("Connected to", str(device))
 
     # ground_truth_model = train_true_model(d=30)
     # XOR Function| lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1)
     # Binary Data Generator| lambda size: torch.randint(0, 2, size=size, dtype=torch.float32)*2-1
-    trained_models, results = run_width_experiment(n=300, d=30, m=np.array([70]), true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=1e-2, shuffle_data=True, batch_size=120, lr=1.2e-1, label_noise_sd=8e-1, max_epochs=1.4e6)
+    trained_models, results =  run_width_experiment(n=300, d=30, m=np.array([70]), use_sam=True, input_dist=lambda size: torch.randint(0, 2, size=size, dtype=torch.float32)*2-1, input_dist_args={}, normalize_input=False, shuffle_data=True, true_function=lambda x: (x[:, 1] * x[:, 2]).unsqueeze(1), convergence_req=1e-2, lr=1.2e-1, batch_size=150, label_noise_sd=0.25, max_epochs=1.2e6)
     for m in trained_models.keys():
         (Path(args.results_file).parent / ("checkpoints_" + str(m))).mkdir(parents=True, exist_ok=True)
         for epoch in trained_models[m].keys():
