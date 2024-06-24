@@ -47,14 +47,14 @@ def graph_curve(results, feature, width, apply_log=True, moving_average=False):
     ax.set_xlabel("Epoch")
     return fig
 
-def plot_weights_progression(checkpoints_list, width, min_dim=None, max_dim=None, min_neuron=None, max_neuron=None):
+def plot_weights_progression(checkpoints_list, results, width, min_dim=None, max_dim=None, min_neuron=None, max_neuron=None):
     fc1_weights_list = [model.fc1.weight.data.detach().cpu().numpy() for model in checkpoints_list]
     fc1_weights_list_to_plot = np.array([weights[min_neuron:max_neuron,min_dim:max_dim].flatten() for weights in fc1_weights_list]).T
     fig, ax = plt.subplots()
     for weights in fc1_weights_list_to_plot:
-        ax.plot(weights, alpha=0.1, c="blue")
+        ax.plot(results[width]["epochs"], weights, alpha=0.1, c="blue")
     ax.set_ylabel("Weight")
-    ax.set_xlabel("Training Time")
+    ax.set_xlabel("Epoch")
     ax.set_title("Progression of FC1 Weights Over Training, m=" + str(width))
     return fig
 
@@ -96,9 +96,9 @@ if __name__ == "__main__":
     for width in results.keys():
         for feature in ["sharpness", "train_loss", "valid_loss", "train_accuracy", "valid_accuracy"]:
             if feature in ["sharpness", "train_loss", "valid_loss"]:
-                figure_tosave = graph_curve(results, feature, width, moving_average=0.9)
+                figure_tosave = graph_curve(results, feature, width, moving_average=False)
             else:
-                figure_tosave = graph_curve(results, feature, width, apply_log=False, moving_average=0.9)
+                figure_tosave = graph_curve(results, feature, width, apply_log=False, moving_average=False)
             figure_tosave.savefig(Path(args.results_file).parent /
                                     (feature + "_" + str(width) + ".png"),
                                     bbox_inches="tight")
@@ -108,11 +108,12 @@ if __name__ == "__main__":
         width = checkpoint_subdir.name.split("_")[-1]
         checkpoints_list_fnames = sorted([ckpt for ckpt in checkpoint_subdir.iterdir()], key=lambda fname: int(fname.stem.split("_")[-1]))
         checkpoints_list = [torch.load(ckpt) for ckpt in checkpoints_list_fnames]
-        figure_tosave = plot_weights_progression(checkpoints_list, width)
+        figure_tosave = plot_weights_progression(checkpoints_list, results, width)
         figure_tosave.savefig(Path(args.results_file).parent /
                             ("weights_progression_" + str(width) + ".png"),
                             bbox_inches="tight")
 
+"""
     for width in results.keys():
         all_checkpoints = [ckpt for ckpt in (Path(args.results_file).parent / ("checkpoints_" + str(width))).iterdir()]
         final_checkpoint = max(all_checkpoints, key=lambda fname: int(fname.stem.split("_")[-1]))
@@ -125,3 +126,4 @@ if __name__ == "__main__":
         figure_tosave.savefig(Path(args.results_file).parent /
                                   ("informative_weights_" + str(width) + ".png"),
                                   bbox_inches="tight")
+"""
