@@ -40,11 +40,13 @@ class two_layer_relu_network(nn.Module):
   
 def train_model(width, d,
                 device, dataloader, input_data, output_data, valid_input, valid_output,
-                lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args,
+                lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless,
                 experiment_results_output, model_checkpoints_output, experiment_results_lock, model_checkpoints_lock):
+    # see run_width_experiment for explanation of parameters
 
     # set up training
     model = two_layer_relu_network(d, 1, width).to(device)
+    model_ema = copy.deepcopy(model)
     criterion = nn.MSELoss()
     if use_sam:
         base_optimizer = torch.optim.SGD
@@ -69,18 +71,27 @@ def train_model(width, d,
             return torch.linalg.vector_norm(torch.cat([g.flatten() for g in gradients]))**2
         total_sharpness = 2/len(data) * np.sum(np.array([point_sharpness(x, model).item() for x in data]))
         return total_sharpness
+    def average_models(model1, model2, factor):
+        averaged_model = two_layer_relu_network(model1.fc1.in_features, model1.fc2.out_features, model1.fc1.out_features)
+        for param1, param2, param_avg in zip(model1.parameters(), model2.parameters(), averaged_model.parameters()):
+            param_avg.data = factor * param1.data + (1 - factor) * param2.data
+        return averaged_model
 
     with tqdm(range(int(epochs)+1), desc="Training Progress, m=" + str(width)) as progress_bar:
         for epoch in progress_bar:
 
             # take measurments
             if epoch % int(epochs/num_measurements) == 0:
+                if not weights_ema or epoch == 0:
+                    measurement_model = model
+                else:
+                    measurement_model = model_ema
                 measured_epochs.append(epoch)
-                train_loss.append(criterion(model(input_data), output_data).item())
-                valid_loss.append(criterion(model(valid_input), valid_output).item())
-                train_accuracy.append(torch.isclose(model(input_data), output_data, atol=convergence_req).float().mean().item())
-                valid_accuracy.append(torch.isclose(model(valid_input), valid_output, atol=convergence_req).float().mean().item())
-                sharpness.append(get_sharpness(input_data, model))    # causes warning and won't run on cuda only for first epoch
+                train_loss.append(criterion(measurement_model(input_data), output_data).item())
+                valid_loss.append(criterion(measurement_model(valid_input), valid_output).item())
+                train_accuracy.append(torch.isclose(measurement_model(input_data), output_data, atol=convergence_req).float().mean().item())
+                valid_accuracy.append(torch.isclose(measurement_model(valid_input), valid_output, atol=convergence_req).float().mean().item())
+                sharpness.append(get_sharpness(input_data, measurement_model))    # causes warning and won't run on cuda only for first epoch
                 with model_checkpoints_lock:
                     model_checkpoints_output_width = model_checkpoints_output[int(width)]
                     model_checkpoints_output_width[epoch] = copy.deepcopy(model).to(torch.device('cpu'))
@@ -91,7 +102,10 @@ def train_model(width, d,
 
                 # take training step
                 model_output = model(data)
-                label_noise = label_noise_dist(**label_noise_dist_args, size=(dataloader.batch_sampler.batch_size,)).unsqueeze(dim=1).to(device)
+                if epoch < epochs - last_epochs_noiseless:
+                    label_noise = label_noise_dist(**label_noise_dist_args, size=(dataloader.batch_sampler.batch_size,)).unsqueeze(dim=1).to(device)
+                else:
+                    label_noise = torch.zeros(size=(dataloader.batch_sampler.batch_size,)).unsqueeze(dim=1).to(device)
                 if use_sam:
                     loss = criterion(model_output, labels)
                 else:
@@ -110,6 +124,9 @@ def train_model(width, d,
 
                 loss_unnoisy = criterion(model_output, labels)
                 all_loss = torch.cat((all_loss, loss_unnoisy.unsqueeze(0)))
+
+                if weights_ema:
+                    model_ema = average_models(model_ema, model, weights_ema)
 
             if epoch % int(epochs/num_measurements) == 0:
                 progress_bar.set_postfix(avg_loss=torch.mean(all_loss).item(), max_loss=torch.max(all_loss).item())
@@ -173,7 +190,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
                          convergence_req=1e-3, convergence_halt=False, max_epochs=3e4, num_measurements=200,
                          input_dist=torch.normal, input_dist_args = {"mean":0, "std":1}, normalize_input=True, shuffle_data=False,
                          true_function=lambda x: torch.sin(torch.sum(x, dim=1).unsqueeze(1)),
-                         label_noise_dist=torch.zeros, label_noise_dist_args={}, random_seed=137):
+                         label_noise_dist=torch.zeros, label_noise_dist_args={}, weights_ema=None, last_epochs_noiseless=0, random_seed=137):
     """
     RETURNS: {m: model}, {m: [converged, sharpness, train_loss, valid_loss, mean_training_sparsity, mean_valid_sparsity, loss_curve]}
     ARGS:
@@ -194,7 +211,9 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     shuffle_data: whether to shuffle the order of the (data, label) pairs before each epoch of SGD
     true_function: function, output = torch_function(input). The function should act on the full nxd matrix of input data
     label_noise_dist: func, a function that outputs random label noise. Defaults to zero label noise. Must include a `size ` parameter.
-    label_noise_dist_args: The arguments to pass into the label_noise_dist
+    label_noise_dist_args: dict, The arguments to pass into the label_noise_dist
+    weights_ema: float or None, If float the model used to calculate loss (but not the model that will be gradient-updated) is an ema of previous models, where the last model has weights_ema weight
+    last_epochs_noiseless: int, the last last_epochs_noiseless epochs will have 0 label noise
     random_seed: int
     """
 
@@ -228,7 +247,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
         p = mp.Process(target=train_model, args=(
             width, d,
             device, dataloader, input_data, output_data, valid_input, valid_output,
-            lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args,
+            lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless,
             experiment_results, model_checkpoints, experiment_results_lock, model_checkpoints_lock
         ))
         p.start()
@@ -260,7 +279,7 @@ if __name__ == "__main__":
     mp.set_start_method("spawn")    # may want to set force=True if issues
 
     # ground_truth_model = train_ground_truth_model(d=30)
-    model_parameters, trained_models, results = run_width_experiment(n=300, d=30, m=np.array([10,20]), shuffle_data=True, true_function=xor, convergence_req=1e-2, lr=12.5, batch_size=300, label_noise_dist=torch_binary_label_noise, label_noise_dist_args={"sd":0.01}, max_epochs=400)
+    model_parameters, trained_models, results = run_width_experiment(n=300, d=30, m=np.array([10,20]), shuffle_data=True, true_function=xor, convergence_req=1e-2, lr=12.5, batch_size=300, label_noise_dist=torch_binary_label_noise, label_noise_dist_args={"sd":0.01}, last_epochs_noiseless=30, max_epochs=400)
     
     for m in trained_models.keys():
         (Path(args.results_file).parent / ("checkpoints_" + str(m))).mkdir()

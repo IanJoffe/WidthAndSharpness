@@ -159,4 +159,4 @@ if __name__ == "__main__":
                                     ("informative_weights_" + str(width) + ".png"),
                                     bbox_inches="tight")
             
-    print("Visualizations saved to " + Path(results_file).parent)
+    print("Visualizations saved to " + str(Path(results_file).parent))

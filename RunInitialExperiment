@@ -4,7 +4,7 @@ conda activate WidthAndSharpness
 pip install -r requirements.txt
 
 EXP_NUM=233
-#python InitialExperiment.py experiment_results/exp${EXP_NUM}/exp${EXP_NUM}.json
+python InitialExperiment.py experiment_results/exp${EXP_NUM}/exp${EXP_NUM}.json
 python VizInitialExperiment.py experiment_results/exp${EXP_NUM}/exp${EXP_NUM}.json
 
 conda deactivate
