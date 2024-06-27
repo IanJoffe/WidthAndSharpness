@@ -1,0 +1,14 @@
+#!/bin/bash
+eval "$($HOME/mc3/bin/conda 'shell.bash' 'hook')"
+conda activate WidthAndSharpness
+pip install -r requirements.txt
+
+EXP_NUMS_LIST=(231 232)
+EXP_FILES=""
+for i in "${EXP_NUMS_LIST[@]}"; do
+    string+="experiment_results/exp${i}/exp${i}.json,"
+done
+EXP_FILES=${string%,}
+python VizInitialExperiment.py ${EXP_FILES} --only feature
+
+conda deactivate

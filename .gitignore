@@ -2,3 +2,5 @@
 experiment_results/*
 !experiment_results/.gitkeep
 slurm*
+__pycache__/
+sam.py

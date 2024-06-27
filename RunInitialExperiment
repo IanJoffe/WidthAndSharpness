@@ -3,8 +3,8 @@ eval "$($HOME/mc3/bin/conda 'shell.bash' 'hook')"
 conda activate WidthAndSharpness
 pip install -r requirements.txt
 
-EXP_NUM=224
-python InitialExperiment.py experiment_results/exp${EXP_NUM}/exp${EXP_NUM}.json
+EXP_NUM=233
+#python InitialExperiment.py experiment_results/exp${EXP_NUM}/exp${EXP_NUM}.json
 python VizInitialExperiment.py experiment_results/exp${EXP_NUM}/exp${EXP_NUM}.json
 
 conda deactivate
