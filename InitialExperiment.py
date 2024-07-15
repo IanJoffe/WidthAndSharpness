@@ -40,7 +40,7 @@ class two_layer_relu_network(nn.Module):
   
 def train_model(width, d,
                 device, dataloader, input_data, output_data, valid_input, valid_output,
-                lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless,
+                lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
                 experiment_results_output, model_checkpoints_output, experiment_results_lock, model_checkpoints_lock):
     # see run_width_experiment for explanation of parameters
 
@@ -102,7 +102,10 @@ def train_model(width, d,
 
                 # take training step
                 model_output = model(data)
-                if epoch < epochs - last_epochs_noiseless:
+                if epoch == epochs+1 - last_epochs_noiseless:        # +1 is necessary so that this does not occur in the final epoch when last_epochs_noiseless=0
+                    for param_group in optimizer.param_groups:
+                        param_group['lr'] = noiseless_lr
+                if epoch <= epochs+1 - last_epochs_noiseless:
                     label_noise = label_noise_dist(**label_noise_dist_args, size=(dataloader.batch_sampler.batch_size,)).unsqueeze(dim=1).to(device)
                 else:
                     label_noise = torch.zeros(size=(dataloader.batch_sampler.batch_size,)).unsqueeze(dim=1).to(device)
@@ -190,7 +193,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
                          convergence_req=1e-3, convergence_halt=False, max_epochs=3e4, num_measurements=200,
                          input_dist=torch.normal, input_dist_args = {"mean":0, "std":1}, normalize_input=True, shuffle_data=False,
                          true_function=lambda x: torch.sin(torch.sum(x, dim=1).unsqueeze(1)),
-                         label_noise_dist=torch.zeros, label_noise_dist_args={}, weights_ema=None, last_epochs_noiseless=0, random_seed=137):
+                         label_noise_dist=torch.zeros, label_noise_dist_args={}, weights_ema=None, last_epochs_noiseless=0, noiseless_lr=3e-4, random_seed=137):
     """
     RETURNS: {m: model}, {m: [converged, sharpness, train_loss, valid_loss, mean_training_sparsity, mean_valid_sparsity, loss_curve]}
     ARGS:
@@ -214,10 +217,11 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     label_noise_dist_args: dict, The arguments to pass into the label_noise_dist
     weights_ema: float or None, If float the model used to calculate loss (but not the model that will be gradient-updated) is an ema of previous models, where the last model has weights_ema weight
     last_epochs_noiseless: int, the last last_epochs_noiseless epochs will have 0 label noise
+    noiseless_lr: float, the learning rate during the final noiseless epochs
     random_seed: int
     """
 
-    model_parameters = {"n": n, "d": d, "lr":lr, "label_noise_sd":(label_noise_dist_args["sd"] if "sd" in label_noise_dist_args else "NA")}
+    model_parameters = {"n": n, "d": d, "lr":lr, "label_noise_sd":(label_noise_dist_args["sd"] if "sd" in label_noise_dist_args else "NA"), "max_epochs":max_epochs, "weights_ema":weights_ema, "last_epochs_noiseless":last_epochs_noiseless}
 
     # generate data
     torch.manual_seed(random_seed)
@@ -247,7 +251,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
         p = mp.Process(target=train_model, args=(
             width, d,
             device, dataloader, input_data, output_data, valid_input, valid_output,
-            lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless,
+            lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
             experiment_results, model_checkpoints, experiment_results_lock, model_checkpoints_lock
         ))
         p.start()
@@ -270,6 +274,7 @@ def torch_binary_label_noise(sd, size):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("results_file", type=str, help="The path to the json file to save results to")
+    parser.add_argument("--experiment_text", type=str, help="A call to run_width_experiment() to run")
     args = parser.parse_args()
     Path(args.results_file).parent.mkdir(parents=True, exist_ok=True)
 
@@ -279,8 +284,11 @@ if __name__ == "__main__":
     mp.set_start_method("spawn")    # may want to set force=True if issues
 
     # ground_truth_model = train_ground_truth_model(d=30)
-    model_parameters, trained_models, results = run_width_experiment(n=300, d=30, m=np.array([10,20]), shuffle_data=True, true_function=xor, convergence_req=1e-2, lr=12.5, batch_size=300, label_noise_dist=torch_binary_label_noise, label_noise_dist_args={"sd":0.01}, last_epochs_noiseless=30, max_epochs=400)
-    
+    if args.experiment_text is None:
+        model_parameters, trained_models, results = run_width_experiment()
+    else:
+        model_parameters, trained_models, results = eval(args.experiment_text)
+
     for m in trained_models.keys():
         (Path(args.results_file).parent / ("checkpoints_" + str(m))).mkdir()
         for epoch in trained_models[m].keys():
