@@ -105,11 +105,11 @@ if __name__ == "__main__":
             results = json.load(f)
     else:
         results = {}
-        for results_file in all_results_files:
-            with open(results_file, 'r') as f:
+        for fname in all_results_files:
+            with open(fname, 'r') as f:
                 current_results_file = json.load(f)
                 if results.keys() & current_results_file.keys():
-                    assert "Tried to merge results from two experiments with the same widths"
+                    assert ("Tried to merge results from two experiments with the same widths: " + str(results.keys() & current_results_file.keys()))
                 results = results | current_results_file
 
     with open(Path(results_file).parent / "model_params.json", 'r') as f:

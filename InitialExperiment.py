@@ -41,13 +41,15 @@ class two_layer_relu_network(nn.Module):
 def train_model(width, d,
                 device, dataloader, input_data, output_data, valid_input, valid_output,
                 lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
-                experiment_results_output, model_checkpoints_output, experiment_results_lock, model_checkpoints_lock):
+                experiment_results_output, model_checkpoints_output, experiment_results_lock, model_checkpoints_lock, random_seed):
     # see run_width_experiment for explanation of parameters
+
+    torch.manual_seed(random_seed)
 
     # set up training
     model = two_layer_relu_network(d, 1, width).to(device)
     model_ema = copy.deepcopy(model)
-    criterion = nn.MSELoss()
+    criterion = nn.MSELoss(reduction="mean")
     if use_sam:
         base_optimizer = torch.optim.SGD
         optimizer = SAM(model.parameters(), base_optimizer, lr=lr, momentum=momentum)
@@ -252,7 +254,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
             width, d,
             device, dataloader, input_data, output_data, valid_input, valid_output,
             lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
-            experiment_results, model_checkpoints, experiment_results_lock, model_checkpoints_lock
+            experiment_results, model_checkpoints, experiment_results_lock, model_checkpoints_lock, random_seed+1
         ))
         p.start()
         processes.append(p)
@@ -287,7 +289,7 @@ if __name__ == "__main__":
     if args.experiment_text is None:
         model_parameters, trained_models, results = run_width_experiment()
     else:
-        model_parameters, trained_models, results = eval(args.experiment_text)
+        model_parameters, trained_models, results = eval(args.experiment_text)    # make sure to use single quotes, not double, if making a string within experiment_text
 
     for m in trained_models.keys():
         (Path(args.results_file).parent / ("checkpoints_" + str(m))).mkdir()
