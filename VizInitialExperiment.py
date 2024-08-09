@@ -104,13 +104,31 @@ if __name__ == "__main__":
         with open(all_results_files[0], 'r') as f:
             results = json.load(f)
     else:
-        results = {}
+        all_results_dicts = []
         for fname in all_results_files:
             with open(fname, 'r') as f:
-                current_results_file = json.load(f)
-                if results.keys() & current_results_file.keys():
-                    assert ("Tried to merge results from two experiments with the same widths: " + str(results.keys() & current_results_file.keys()))
-                results = results | current_results_file
+                all_results_dicts.append(json.load(f))
+
+        def average_dicts(dicts):
+            # this is a mess but it takes {{width: {feature: [val1, val2, val3, ...], ...}, ...}, ...} and takes the average among vals with the same width, feature, and position in the list
+            totals_dict = {}
+            for d in all_results_dicts:
+                for m, subd in d.items():
+                    for k, v in subd.items():
+                        if isinstance(v, list):
+                            if m in totals_dict:
+                                totals_dict[m][k] = totals_dict[m].get(k, np.zeros(len(v))) + np.array(v)
+                            else:
+                                totals_dict[m] = {k: np.array(v)}
+                        else:
+                            if m in totals_dict:
+                                totals_dict[m][k] = type(v)(totals_dict[m].get(k, 0) + v)
+                            else:
+                                totals_dict[m] = {k: v}
+            averaged_dict = {m:{k:(v/len([d for d in dicts if d.get(m)])) for k, v in subd.items()} for m, subd in totals_dict.items()}
+            return averaged_dict
+                
+        results = average_dicts(all_results_dicts)
 
     with open(Path(results_file).parent / "model_params.json", 'r') as f:
         caption = str(json.load(f))
