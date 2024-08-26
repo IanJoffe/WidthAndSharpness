@@ -26,6 +26,7 @@ def graph_feature(results, feature, widths=None, when="last", moving_average=Fal
     ax.scatter(widths, y)
     ax.set_xlabel("Width")
     ax.set_ylabel(feature + " after Completed Training")
+    ax.grid(visible=True, axis="y", which="both")
     if caption:
         fig.text(0.5, -0.03, caption, ha='center', va='center')
     return fig

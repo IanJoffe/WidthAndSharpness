@@ -26,11 +26,20 @@ class simpleDataset(Dataset):
   
 
 class two_layer_relu_network(nn.Module):
-    def __init__(self, input_size, output_size, width):
+    def __init__(self, input_size, output_size, width, scale_init_factor=1):
         super().__init__()
         self.fc1 = nn.Linear(input_size, width, bias=False)
         self.relu = nn.ReLU(inplace=False)
         self.fc2 = nn.Linear(width, output_size, bias=False)
+        if scale_init_factor != 1:
+            self.scale_init(scale_init_factor)
+
+    def scale_init(self, factor):
+        nn.init.kaiming_uniform_(self.fc1.weight, a=0, mode='fan_in', nonlinearity='relu')
+        self.fc1.weight.data *= factor
+        nn.init.kaiming_uniform_(self.fc2.weight, a=0, mode='fan_in', nonlinearity='relu')
+        self.fc2.weight.data *= factor
+
 
     def forward(self, x):
         z1 = self.fc1(x)
@@ -39,7 +48,7 @@ class two_layer_relu_network(nn.Module):
         return z2
   
 def train_model(width, d,
-                device, dataloader, input_data, output_data, valid_input, valid_output,
+                device, dataloader, input_data, output_data, valid_input, valid_output, scale_init_factor,
                 lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
                 experiment_results_output, model_checkpoints_output, experiment_results_lock, model_checkpoints_lock, random_seed):
     # see run_width_experiment for explanation of parameters
@@ -47,7 +56,7 @@ def train_model(width, d,
     torch.manual_seed(random_seed)
 
     # set up training
-    model = two_layer_relu_network(d, 1, width).to(device)
+    model = two_layer_relu_network(d, 1, width, scale_init_factor).to(device)
     model_ema = copy.deepcopy(model)
     criterion = nn.MSELoss(reduction="mean")
     if use_sam:
@@ -191,7 +200,7 @@ def train_ground_truth_model(d):
   
   
 def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
-                         lr = 3e-4, momentum=0, batch_size=1, use_sam=False,
+                         scale_init_factor=1, lr=3e-4, momentum=0, batch_size=1, use_sam=False,
                          convergence_req=1e-3, convergence_halt=False, max_epochs=3e4, num_measurements=200,
                          input_dist=torch.normal, input_dist_args = {"mean":0, "std":1}, normalize_input=True, shuffle_data=False,
                          true_function=lambda x: torch.sin(torch.sum(x, dim=1).unsqueeze(1)),
@@ -203,6 +212,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     n_valid: int, number of points in validation data
     d: int, dimension of each training data point
     m: list[int], widths of neural network to run experiment on
+    scale_init_factor: float, adjust the bounds of the Kaiming initialization's uniform distribution by this factor
     lr: float, learning rate
     momentum: float, momentum parameter for SGD
     use_sam: bool, set to true to use the same optimizer, if false will use SGD with label noise
@@ -252,7 +262,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     for width in m:
         p = mp.Process(target=train_model, args=(
             width, d,
-            device, dataloader, input_data, output_data, valid_input, valid_output,
+            device, dataloader, input_data, output_data, valid_input, valid_output, scale_init_factor,
             lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
             experiment_results, model_checkpoints, experiment_results_lock, model_checkpoints_lock, random_seed+1
         ))
@@ -266,6 +276,15 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
 
 def xor(x):
     return (x[:, 1] * x[:, 2]).unsqueeze(1)
+
+def decaying_pairprod(x, alpha=2):
+    if x.shape[1] % 2 == 0:
+        return torch.sum(x[:,::2] * x[:,1::2] / (torch.arange(1,x.shape[1]//2 + 1, device=x.device) ** alpha), dim=1).unsqueeze(1)
+    else:
+        return torch.sum(x[:,::2] * torch.cat([x[:,1::2], torch.ones(x.shape[1])], dim=0, device=x.device) / (torch.arange(1,x.shape[1]//2, device=x.device) ** alpha), dim=1).unsqueeze(1)
+
+def sinsum(x):
+    return torch.sin(torch.sum(x, dim=1).unsqueeze(1))
 
 def torch_binary_input(size):
     return torch.randint(0, 2, size=size, dtype=torch.float32)*2-1

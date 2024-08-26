@@ -3,20 +3,22 @@ eval "$($HOME/mc3/bin/conda 'shell.bash' 'hook')"
 conda activate WidthAndSharpness
 pip install -r requirements.txt
 
-EXP_SUBDIR="exp584-663"
-EXP_NUM=584
-N=($(seq 40 20 120))
-D=($(seq 4 2 12))
+EXP_SUBDIR="exp753"
+EXP_NUM=36
+N=($(seq 150 150))
+D=($(seq 15 15))
 
-for i in $(seq 0 4); do
-    for m in $(seq 11 26); do
-        n=${N[$i]}
-        d=${D[$i]}
-        EXP_DESC="run_width_experiment(n=${n}, d=${d}, m=np.array([${m}]), shuffle_data=True, true_function=xor, convergence_req=1e-2, lr=3, batch_size=${n}, label_noise_dist=torch_binary_label_noise, label_noise_dist_args={'sd':0.01}, last_epochs_noiseless=9e5, noiseless_lr=4e-2, max_epochs=3.1e6)"
-        
-        sbatch -p gpu -G1 RunInitialExperiment ${EXP_NUM} "${EXP_SUBDIR}" "${EXP_DESC}"
+for i in $(seq 0 0); do
+    for m in $(seq 75 79); do
+        for _ in $(seq 0 0); do
+            n=${N[$i]}
+            d=${D[$i]}
+            EXP_DESC="run_width_experiment(n=${n}, d=${d}, m=np.array([${m}]), shuffle_data=True, true_function=xor, convergence_req=1e-2, lr=6, batch_size=${n}, label_noise_dist=torch_binary_label_noise, label_noise_dist_args={'sd':0.01}, last_epochs_noiseless=1.8e6, noiseless_lr=4e-2, max_epochs=6.2e6)"
+            
+            sbatch -p gpu -G1 RunInitialExperiment ${EXP_NUM} "${EXP_SUBDIR}" "${EXP_DESC}"
 
-        EXP_NUM=$((EXP_NUM + 1))
+            EXP_NUM=$((EXP_NUM + 1))
+        done
     done
 done
 

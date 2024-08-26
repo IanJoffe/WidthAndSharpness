@@ -3,9 +3,9 @@ eval "$($HOME/mc3/bin/conda 'shell.bash' 'hook')"
 conda activate WidthAndSharpness
 pip install -r requirements.txt
 
-EXP_NUMS_LIST=(528 529 530 531 532 533 534 535 536 537 539 540 541)
+EXP_NUMS_LIST=($(seq 1 28))
 EXP_FILES=""
-EXP_SUBDIR="."
+EXP_SUBDIR="exp755"
 for i in "${EXP_NUMS_LIST[@]}"; do
     string+="experiment_results/${EXP_SUBDIR}/exp${i}/exp${i}.json,"
 done

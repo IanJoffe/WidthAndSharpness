@@ -3,9 +3,9 @@ eval "$($HOME/mc3/bin/conda 'shell.bash' 'hook')"
 conda activate WidthAndSharpness
 pip install -r requirements.txt
 
-EXP_NUM=${1:-583}
+EXP_NUM=${1:-756}
 EXP_SUBDIR=${2:-"."}
-EXP_DESC=${3:-"run_width_experiment(n=40, d=4, m=np.array([26]), shuffle_data=True, true_function=xor, convergence_req=1e-2, lr=4.5, batch_size=40, label_noise_dist=torch_binary_label_noise, label_noise_dist_args={'sd':0.01}, last_epochs_noiseless=9e5, noiseless_lr=4e-2, max_epochs=3.1e6)"}
+EXP_DESC=${3:-"run_width_experiment(n=300, d=30, m=np.array([15,20,30,50]), shuffle_data=True, true_function=decaying_pairprod, convergence_req=1e-2, lr=1.2e-1, batch_size=300, input_dist=torch_binary_input, input_dist_args={}, normalize_input=False, label_noise_dist=torch_binary_label_noise, label_noise_dist_args={'sd':0.01}, max_epochs=3e6)"}
 
 python InitialExperiment.py experiment_results/${EXP_SUBDIR}/exp${EXP_NUM}/exp${EXP_NUM}.json --experiment_text "$EXP_DESC"
 python VizInitialExperiment.py experiment_results/${EXP_SUBDIR}/exp${EXP_NUM}/exp${EXP_NUM}.json
