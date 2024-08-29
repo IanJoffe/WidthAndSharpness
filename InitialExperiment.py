@@ -281,7 +281,7 @@ def decaying_pairprod(x, alpha=2):
     if x.shape[1] % 2 == 0:
         return torch.sum(x[:,::2] * x[:,1::2] / (torch.arange(1,x.shape[1]//2 + 1, device=x.device) ** alpha), dim=1).unsqueeze(1)
     else:
-        return torch.sum(x[:,::2] * torch.cat([x[:,1::2], torch.ones(x.shape[1])], dim=0, device=x.device) / (torch.arange(1,x.shape[1]//2, device=x.device) ** alpha), dim=1).unsqueeze(1)
+        return torch.sum(x[:,::2] *  torch.cat((x[:,1::2], torch.ones(x.shape[0]).unsqueeze(1)), dim=1).to(x.device) / (torch.arange(1,x.shape[1]//2, device=x.device) ** alpha), dim=1).unsqueeze(1)
 
 def sinsum(x):
     return torch.sin(torch.sum(x, dim=1).unsqueeze(1))
