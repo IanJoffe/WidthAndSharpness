@@ -27,6 +27,7 @@ def graph_feature(results, feature, widths=None, when="last", moving_average=Fal
     ax.set_xlabel("Width")
     ax.set_ylabel(feature + " after Completed Training")
     ax.grid(visible=True, axis="y", which="both")
+    ax.tick_params(axis='x', rotation=90)
     if caption:
         fig.text(0.5, -0.03, caption, ha='center', va='center')
     return fig
@@ -107,8 +108,11 @@ if __name__ == "__main__":
     else:
         all_results_dicts = []
         for fname in all_results_files:
-            with open(fname, 'r') as f:
-                all_results_dicts.append(json.load(f))
+            if Path(fname).exists():
+                with open(fname, 'r') as f:
+                    all_results_dicts.append(json.load(f))
+            else:
+                print(fname + " does not exist")
 
         def average_dicts(dicts):
             # this is a mess but it takes {{width: {feature: [val1, val2, val3, ...], ...}, ...}, ...} and takes the average among vals with the same width, feature, and position in the list

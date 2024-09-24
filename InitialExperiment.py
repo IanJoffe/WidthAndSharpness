@@ -6,6 +6,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import torch.multiprocessing as mp
 from sam import SAM
+from grokfast import gradfilter_ma, gradfilter_ema
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import json
@@ -49,7 +50,8 @@ class two_layer_relu_network(nn.Module):
   
 def train_model(width, d,
                 device, dataloader, input_data, output_data, valid_input, valid_output, scale_init_factor,
-                lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
+                lr, momentum, use_sam, use_grokfast, grokfast_params, convergence_req, convergence_halt, max_epochs, num_measurements,
+                label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
                 experiment_results_output, model_checkpoints_output, experiment_results_lock, model_checkpoints_lock, random_seed):
     # see run_width_experiment for explanation of parameters
 
@@ -120,6 +122,8 @@ def train_model(width, d,
                     label_noise = label_noise_dist(**label_noise_dist_args, size=(dataloader.batch_sampler.batch_size,)).unsqueeze(dim=1).to(device)
                 else:
                     label_noise = torch.zeros(size=(dataloader.batch_sampler.batch_size,)).unsqueeze(dim=1).to(device)
+                if use_grokfast:
+                    grads = None
                 if use_sam:
                     loss = criterion(model_output, labels)
                 else:
@@ -131,6 +135,11 @@ def train_model(width, d,
                         optimizer.first_step(zero_grad=True)
                         criterion(model(data), labels).backward()
                         optimizer.second_step(zero_grad=True)
+                    elif use_grokfast and epoch > 20:
+                        loss.backward()
+                        grads = gradfilter_ema(model, grads=grads, **grokfast_params)
+                        optimizer.step()
+                        optimizer.zero_grad()
                     else:
                         loss.backward()
                         optimizer.step()
@@ -200,7 +209,7 @@ def train_ground_truth_model(d):
   
   
 def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
-                         scale_init_factor=1, lr=3e-4, momentum=0, batch_size=1, use_sam=False,
+                         scale_init_factor=1, lr=3e-4, momentum=0, batch_size=1, use_sam=False, use_grokfast=False, grokfast_params={},
                          convergence_req=1e-3, convergence_halt=False, max_epochs=3e4, num_measurements=200,
                          input_dist=torch.normal, input_dist_args = {"mean":0, "std":1}, normalize_input=True, shuffle_data=False,
                          true_function=lambda x: torch.sin(torch.sum(x, dim=1).unsqueeze(1)),
@@ -215,7 +224,9 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
     scale_init_factor: float, adjust the bounds of the Kaiming initialization's uniform distribution by this factor
     lr: float, learning rate
     momentum: float, momentum parameter for SGD
-    use_sam: bool, set to true to use the same optimizer, if false will use SGD with label noise
+    use_sam: bool, set to true to use the sam optimizer, if false will use SGD with label noise
+    use_grokfast: bool, set to true to apply grokfast https://arxiv.org/pdf/2405.20233
+    grokfast_params: dict, paramters to call gradfilter_ema with. can contain alpha and lam. 
     convergence_req: float, the NN will be considered converged if EVERY data points has loss this low, also used to calculate accuracy
     convergence_halt: bool, set to True to halt training once converged
     max_epochs: int, the NN will run for this many epochs before giving up on convergence
@@ -263,7 +274,8 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
         p = mp.Process(target=train_model, args=(
             width, d,
             device, dataloader, input_data, output_data, valid_input, valid_output, scale_init_factor,
-            lr, momentum, use_sam, convergence_req, convergence_halt, max_epochs, num_measurements, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
+            lr, momentum, use_sam, use_grokfast, grokfast_params, convergence_req, convergence_halt, max_epochs, num_measurements,
+            label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
             experiment_results, model_checkpoints, experiment_results_lock, model_checkpoints_lock, random_seed+1
         ))
         p.start()

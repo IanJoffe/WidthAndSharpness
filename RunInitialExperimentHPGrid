@@ -3,17 +3,17 @@ eval "$($HOME/mc3/bin/conda 'shell.bash' 'hook')"
 conda activate WidthAndSharpness
 pip install -r requirements.txt
 
-EXP_SUBDIR="exp753"
-EXP_NUM=36
-N=($(seq 150 150))
-D=($(seq 15 15))
+EXP_SUBDIR="exp763"
+EXP_NUM=2
+N=($(seq 300 300))
+D=($(seq 50 50))
 
 for i in $(seq 0 0); do
-    for m in $(seq 75 79); do
+    for m in $(seq 16 26); do
         for _ in $(seq 0 0); do
             n=${N[$i]}
             d=${D[$i]}
-            EXP_DESC="run_width_experiment(n=${n}, d=${d}, m=np.array([${m}]), shuffle_data=True, true_function=xor, convergence_req=1e-2, lr=6, batch_size=${n}, label_noise_dist=torch_binary_label_noise, label_noise_dist_args={'sd':0.01}, last_epochs_noiseless=1.8e6, noiseless_lr=4e-2, max_epochs=6.2e6)"
+            EXP_DESC="run_width_experiment(n=300, d=30, m=np.array([25]), use_grokfast=True, grokfast_params={'alpha':0.99}, shuffle_data=True, true_function=xor, convergence_req=1e-2, lr=25, batch_size=300, label_noise_dist=torch_binary_label_noise, label_noise_dist_args={'sd':0.01}, last_epochs_noiseless=1.8e6, noiseless_lr=4e-2, max_epochs=6.2e6)"
             
             sbatch -p gpu -G1 RunInitialExperiment ${EXP_NUM} "${EXP_SUBDIR}" "${EXP_DESC}"
 
