@@ -1,0 +1,4 @@
+Training Progress, m=16:   0%|          | 0/1001 [00:00<?, ?it/s]/home-nfs/ianjoffe/mc3/envs/WidthAndSharpness/lib/python3.12/site-packages/torch/autograd/graph.py:744: UserWarning: Attempting to run cuBLAS, but there was no current CUDA context! Attempting to set the primary context... (Triggered internally at ../aten/src/ATen/cuda/CublasHandlePool.cpp:135.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+Training Progress, m=16: 100%|██████████| 1001/1001 [02:21<00:00,  7.09it/s, avg_loss=0.000629, max_loss=0.000629]
+Model with width 16 interpolated in 0 epochs

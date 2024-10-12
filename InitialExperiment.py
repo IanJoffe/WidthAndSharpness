@@ -9,6 +9,7 @@ from sam import SAM
 from grokfast import gradfilter_ma, gradfilter_ema
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import wandb
 import json
 from pathlib import Path
 import copy
@@ -51,9 +52,21 @@ class two_layer_relu_network(nn.Module):
 def train_model(width, d,
                 device, dataloader, input_data, output_data, valid_input, valid_output, scale_init_factor,
                 lr, momentum, use_sam, use_grokfast, grokfast_params, convergence_req, convergence_halt, max_epochs, num_measurements,
-                label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
-                experiment_results_output, model_checkpoints_output, experiment_results_lock, model_checkpoints_lock, random_seed):
+                input_dist, input_dist_args, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
+                experiment_results_output, model_checkpoints_output, experiment_results_lock, model_checkpoints_lock, random_seed,
+                no_wandb, wandb_notes, wandb_storage_location):
     # see run_width_experiment for explanation of parameters
+
+    if not no_wandb:
+        wandb.init(
+            project = "WidthAndSharpness",
+            notes = f'Stored in {wandb_storage_location}. {wandb_notes}'
+        )
+        wandb.config = {"wdith":width, "d":d, "lr":lr, "momentum":momentum, "use_sam":use_sam, "use_grokfast":use_grokfast,
+                        **{f'grokfast_params_{key}':value for key, value in grokfast_params.items()}, "convergence_req":convergence_req,
+                        "convergence_halt":convergence_halt, "max_epohcs":max_epochs, "input_dist":input_dist, **{f'input_dist_args_{key}':value for key, value in input_dist_args.items()},
+                        "label_noise_dist":label_noise_dist, **{f'label_noise_dist_args_{key}':value for key, value in label_noise_dist_args.items()}, "weights_ema":weights_ema,
+                        "last_epochs_noiseless":last_epochs_noiseless, "noiseless_lr":noiseless_lr, "random_seed":random_seed}
 
     torch.manual_seed(random_seed)
 
@@ -99,12 +112,21 @@ def train_model(width, d,
                     measurement_model = model
                 else:
                     measurement_model = model_ema
-                measured_epochs.append(epoch)
-                train_loss.append(criterion(measurement_model(input_data), output_data).item())
-                valid_loss.append(criterion(measurement_model(valid_input), valid_output).item())
-                train_accuracy.append(torch.isclose(measurement_model(input_data), output_data, atol=convergence_req).float().mean().item())
-                valid_accuracy.append(torch.isclose(measurement_model(valid_input), valid_output, atol=convergence_req).float().mean().item())
-                sharpness.append(get_sharpness(input_data, measurement_model))    # causes warning and won't run on cuda only for first epoch
+                measured_epochs_measurement = epoch
+                train_loss_measurement = criterion(measurement_model(input_data), output_data).item()
+                valid_loss_measurement = criterion(measurement_model(valid_input), valid_output).item()
+                train_accuracy_measurement = torch.isclose(measurement_model(input_data), output_data, atol=convergence_req).float().mean().item()
+                valid_accuracy_measurement = torch.isclose(measurement_model(valid_input), valid_output, atol=convergence_req).float().mean().item()
+                sharpness_measurement = get_sharpness(input_data, measurement_model)
+                measured_epochs.append(measured_epochs_measurement)
+                train_loss.append(train_loss_measurement)
+                valid_loss.append(valid_loss_measurement)
+                train_accuracy.append(train_accuracy_measurement)
+                valid_accuracy.append(valid_accuracy_measurement)
+                sharpness.append(sharpness_measurement)    # causes warning and won't run on cuda only for first epoch
+                if not no_wandb:
+                    wandb.log({"measured_epochs": measured_epochs_measurement, "train_loss":train_loss_measurement, "valid_loss":valid_loss_measurement,
+                               "train_accuracy":train_accuracy_measurement, "valid_accuracy":valid_accuracy_measurement, "sharpness":sharpness_measurement})
                 with model_checkpoints_lock:
                     model_checkpoints_output_width = model_checkpoints_output[int(width)]
                     model_checkpoints_output_width[epoch] = copy.deepcopy(model).to(torch.device('cpu'))
@@ -275,8 +297,9 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
             width, d,
             device, dataloader, input_data, output_data, valid_input, valid_output, scale_init_factor,
             lr, momentum, use_sam, use_grokfast, grokfast_params, convergence_req, convergence_halt, max_epochs, num_measurements,
-            label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
-            experiment_results, model_checkpoints, experiment_results_lock, model_checkpoints_lock, random_seed+1
+            input_dist, input_dist_args, label_noise_dist, label_noise_dist_args, weights_ema, last_epochs_noiseless, noiseless_lr,
+            experiment_results, model_checkpoints, experiment_results_lock, model_checkpoints_lock, random_seed+(width-m[0]),
+            no_wandb, wandb_notes, wandb_storage_location
         ))
         p.start()
         processes.append(p)
@@ -284,6 +307,7 @@ def run_width_experiment(n=100, n_valid=1000, d=10, m=list(range(10, 100, 5)),
         p.join()
 
     print("Completed training experimental models")
+    wandb.finish()
     return model_parameters, model_checkpoints, experiment_results
 
 def xor(x):
@@ -308,8 +332,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("results_file", type=str, help="The path to the json file to save results to")
     parser.add_argument("--experiment_text", type=str, help="A call to run_width_experiment() to run")
+    parser.add_argument("--wandb_notes", type=str, help="Notes to log in the Weights & Biases description")
+    parser.add_argument("-f", "--no_wandb", action="store_true", help="Use this flag to not log the experiment on Weights & Biases")
+    
     args = parser.parse_args()
     Path(args.results_file).parent.mkdir(parents=True, exist_ok=True)
+
+    wandb_storage_location = args.results_file
+    wandb_notes = args.wandb_notes
+    no_wandb = args.no_wandb
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     torch.cuda.init() 

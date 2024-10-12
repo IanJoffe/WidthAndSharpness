@@ -1,0 +1,86 @@
+{
+  "os":  "Linux-6.1.0-22-amd64-x86_64-with-glibc2.36",
+  "python":  "3.12.3",
+  "startedAt":  "2024-10-12T03:12:40.229693Z",
+  "args":  [
+    "experiment_results/./exp780/exp780.json",
+    "--experiment_text",
+    "run_width_experiment(n=300, d=10, m=np.array([16]), shuffle_data=True, true_function=xor, convergence_req=1e-2, lr=1, batch_size=300, label_noise_dist=torch_binary_label_noise, label_noise_dist_args={'sd':0.01}, max_epochs=1000)",
+    "--wandb_notes",
+    "test"
+  ],
+  "program":  "/home-nfs/ianjoffe/WidthAndSharpness/InitialExperiment.py",
+  "codePath":  "InitialExperiment.py",
+  "git":  {
+    "remote":  "git@github.com:IanJoffe/WidthAndSharpness.git",
+    "commit":  "4cc3e265244705f7dfbc9d058217eb72199910ca"
+  },
+  "email":  "iijoffe@gmail.com",
+  "root":  "/home-nfs/ianjoffe/WidthAndSharpness",
+  "host":  "g0.ttic.edu",
+  "username":  "ianjoffe",
+  "executable":  "/home-nfs/ianjoffe/mc3/envs/WidthAndSharpness/bin/python",
+  "codePathLocal":  "InitialExperiment.py",
+  "cpu_count":  20,
+  "cpu_count_logical":  20,
+  "gpu":  "[NVIDIA GeForce RTX 2080 Ti]",
+  "gpu_count":  1,
+  "disk":  {
+    "/":  {
+      "total":  "235150848000",
+      "used":  "34470170624"
+    }
+  },
+  "memory":  {
+    "total":  "270326984704"
+  },
+  "cpu":  {
+    "count":  20,
+    "countLogical":  20
+  },
+  "gpu_nvidia":  [
+    {
+      "name":  "NVIDIA GeForce RTX 2080 Ti",
+      "memoryTotal":  "11811160064",
+      "cudaCores":  4352,
+      "architecture":  "Turing"
+    }
+  ],
+  "slurm":  {
+    "cluster_name":  "beehive",
+    "conf":  "/etc/slurm/slurm.conf",
+    "cpus_on_node":  "2",
+    "gpus":  "1",
+    "gpus_on_node":  "1",
+    "gtids":  "0",
+    "job_account":  "ianjoffe",
+    "job_cpus_per_node":  "2",
+    "job_gid":  "2002",
+    "job_gpus":  "0",
+    "job_id":  "232337",
+    "job_name":  "RunInitialExperiment",
+    "job_nodelist":  "g0",
+    "job_num_nodes":  "1",
+    "job_partition":  "gpu",
+    "job_qos":  "normal",
+    "job_uid":  "1462",
+    "job_user":  "ianjoffe",
+    "jobid":  "232337",
+    "localid":  "0",
+    "nnodes":  "1",
+    "node_aliases":  "(null)",
+    "nodeid":  "0",
+    "nodelist":  "g0",
+    "prio_process":  "0",
+    "procid":  "0",
+    "script_context":  "prolog_task",
+    "submit_dir":  "/home-nfs/ianjoffe/WidthAndSharpness",
+    "submit_host":  "beehive.ttic.edu",
+    "task_pid":  "1747295",
+    "tasks_per_node":  "2",
+    "topology_addr":  "g0",
+    "topology_addr_pattern":  "node",
+    "working_cluster":  "beehive:beehive:6817:9728:109"
+  },
+  "cudaVersion":  "12.4"
+}
